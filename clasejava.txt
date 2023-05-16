@@ -1,0 +1,360 @@
+
+package Clases;
+import Entidad.ClsDireccion;
+import Entidad.ClsDteDocumento;
+import Entidad.ClsDteEmisor;
+import Entidad.ClsDteExtension;
+import Entidad.ClsDteReceptor;
+import Entidad.ClsDteitentificacion;
+import Entidad.ClsDtepago;
+import Entidad.ClsDteresumen;
+import Entidad.ClsDtttributo;
+import Negocio.ClsDteObtenerDte;
+import com.cenqua.clover.reporters.json.JSONException;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import javax.swing.JOptionPane;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import Clases.EnviarCorreo;
+import java.sql.Connection;
+import java.io.File;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.mail.MessagingException;
+import net.sf.jasperreports.engine.JasperCompileManager;
+import net.sf.jasperreports.engine.JasperExportManager;
+import net.sf.jasperreports.engine.JasperFillManager;
+import net.sf.jasperreports.engine.JasperPrint;
+import net.sf.jasperreports.engine.JasperReport;
+import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import Conexion.ClsConexionLocal;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.view.JasperViewer;
+
+
+
+/**
+ *
+ * @author Usuario
+ */
+public class Dte_EscribirDte {
+     
+
+    public static void main(String[] args) throws JSONException, MessagingException, JRException, IOException {
+        String dato = JOptionPane.showInputDialog(null, "Ingrese el dato:");
+
+        // Crea una instancia de la clase ClsDteObtenerDte
+        ClsDteObtenerDte dteObtenerDte = new ClsDteObtenerDte();
+
+        // Llama al método obtenerIdentificacion y pasa el dato ingresado
+        ClsDteitentificacion identificacion = dteObtenerDte.obtenerIdentificacion(dato);
+        ClsDteEmisor emisor = dteObtenerDte.obtenerEmisor(dato);
+        ClsDteReceptor receptor = dteObtenerDte.obtenerReceptor(dato);
+        List<ClsDteDocumento> listaDocumentos = dteObtenerDte.obtenerCuerpo(dato);
+        ClsDteresumen resumen = dteObtenerDte.obtenerResumen(dato);
+
+        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        JsonArray jsonCuerpoDocumento = new JsonArray();
+
+        for (ClsDteDocumento documento : listaDocumentos) {
+            List<String> listaTributos = new ArrayList<>();
+            for (String tributo : documento.getTributos()) {
+                listaTributos.add(tributo.replaceAll("\\[|\\]|\"", ""));
+            }
+            documento.setTributos(listaTributos);
+        }
+        for (ClsDteDocumento item : listaDocumentos) {
+            JsonObject jsonDetalle = new JsonObject();
+            jsonDetalle.addProperty("cantidad", item.getCantidad());
+            jsonDetalle.addProperty("codTributo", item.getCodTributo());
+            jsonDetalle.addProperty("codigo", item.getCodigo());
+            jsonDetalle.addProperty("descripcion", item.getDescripcion());
+            jsonDetalle.addProperty("montoDescu", item.getMontoDescu());
+            jsonDetalle.addProperty("noGravado", item.getNoGravado());
+            jsonDetalle.addProperty("numItem", item.getNumItem());
+            jsonDetalle.addProperty("numeroDocumento", item.getNumeroDocumento());
+            jsonDetalle.addProperty("precioUni", item.getPrecioUni());
+            jsonDetalle.addProperty("psv", item.getPsv());
+            jsonDetalle.addProperty("tipoItem", item.getTipoItem());
+            jsonDetalle.addProperty("uniMedida", item.getUniMedida());
+            jsonDetalle.addProperty("ventaExenta", item.getVentaExenta());
+            jsonDetalle.addProperty("ventaGravada", item.getVentaGravada());
+            jsonDetalle.addProperty("ventaNoSuj", item.getVentaNoSuj());
+            jsonDetalle.add("tributos", gson.toJsonTree(Arrays.asList(item.getTributos().get(0))));
+
+            jsonCuerpoDocumento.add(jsonDetalle);
+        }
+        
+
+        // Escribe los resultados en un archivo JSON
+       String directorioActual = System.getProperty("user.dir");
+        String numeroControl =identificacion.getNumeroControl();
+        String nombreArchivo = numeroControl + ".json";
+
+        // Obtener el número del mes actual
+        LocalDate today = LocalDate.now();
+        int month = today.getMonthValue();
+        String monthFolder = "src/doc/" + month;
+
+        // Crear la carpeta del mes actual si no existe
+        File folder = new File(directorioActual, monthFolder);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+
+        // Crear la ruta del archivo
+        String rutaArchivo = folder.getAbsolutePath() + "/" + nombreArchivo;
+        System.out.println("Ruta del archivo: " + rutaArchivo);
+
+        JsonObject jsonIdentificacion = new JsonObject();
+        jsonIdentificacion.addProperty("ambiente", identificacion.getAmbiente());
+        jsonIdentificacion.addProperty("codigoGeneracion", identificacion.getCodigoGeneracion());
+        jsonIdentificacion.addProperty("fecEmi", identificacion.getFecEmi());
+        jsonIdentificacion.addProperty("horEmi", identificacion.getHorEmi());
+        jsonIdentificacion.addProperty("motivoContin", identificacion.getMotivoContin());
+        jsonIdentificacion.addProperty("numeroControl", identificacion.getNumeroControl());
+        jsonIdentificacion.addProperty("tipoContingencia", identificacion.getTipoContingencia());
+        jsonIdentificacion.addProperty("tipoDte", identificacion.getTipoDte());
+        jsonIdentificacion.addProperty("tipoModelo", identificacion.getTipoModelo());
+        jsonIdentificacion.addProperty("tipoMoneda", identificacion.getTipoMoneda());
+        jsonIdentificacion.addProperty("tipoOperacion", identificacion.getTipoOperacion());
+        jsonIdentificacion.addProperty("version", identificacion.getVersion());
+
+        JsonObject jsonEmisor = new JsonObject();
+        jsonEmisor.addProperty("codActividad", emisor.getCodActividad());
+        jsonEmisor.addProperty("codEstable", emisor.getCodEstable());
+        jsonEmisor.addProperty("codEstableMH", emisor.getCodEstableMH());
+        jsonEmisor.addProperty("codPuntoVenta", emisor.getCodPuntoVenta());
+        jsonEmisor.addProperty("codPuntoVentaMH", emisor.getCodPuntoVentaMH());
+        jsonEmisor.addProperty("correo", emisor.getCorreo());
+        jsonEmisor.addProperty("descActividad", emisor.getDescActividad());
+        jsonEmisor.addProperty("nit", emisor.getNit());
+        jsonEmisor.addProperty("nombre", emisor.getNombre());
+        jsonEmisor.addProperty("nombreComercial", emisor.getNombreComercial());
+        jsonEmisor.addProperty("nrc", emisor.getNrc());
+        jsonEmisor.addProperty("telefono", emisor.getTelefono());
+        jsonEmisor.addProperty("tipoEstablecimiento", emisor.getTipoEstablecimiento());
+
+        ClsDireccion direccion = emisor.getDireccion();
+        JsonObject jsonDireccion = new JsonObject();
+        jsonDireccion.addProperty("complemento", direccion.getComplemento());
+        jsonDireccion.addProperty("departamento", direccion.getDepartamento());
+        jsonDireccion.addProperty("municipio", direccion.getMunicipio());
+        jsonEmisor.add("direccion", jsonDireccion);
+        JsonObject jsonReceptor = new JsonObject();
+        jsonReceptor.addProperty("codActividad", receptor.getCodActividad());
+        jsonReceptor.addProperty("correo", receptor.getCorreo());
+        jsonReceptor.addProperty("descActividad", receptor.getDescActividad());
+        jsonReceptor.addProperty("nit", receptor.getNit());
+        jsonReceptor.addProperty("nombre", receptor.getNombre());
+        jsonReceptor.addProperty("nombreComercial", receptor.getNombreComercial());
+        jsonReceptor.addProperty("nrc", receptor.getNrc());
+        jsonReceptor.addProperty("telefono", receptor.getTelefono());
+
+        ClsDireccion direccionReceptor = receptor.getDireccion();
+        JsonObject jsonDireccionReceptor = new JsonObject();
+        jsonDireccionReceptor.addProperty("complemento", direccionReceptor.getComplemento());
+        jsonDireccionReceptor.addProperty("departamento", direccionReceptor.getDepartamento());
+        jsonDireccionReceptor.addProperty("municipio", direccionReceptor.getMunicipio());
+        jsonReceptor.add("direccion", jsonDireccionReceptor);
+
+        JsonObject jsonResumen = new JsonObject();
+        jsonResumen.addProperty("condicionOperacion", resumen.getCondicionOperacion());
+        jsonResumen.addProperty("descuExenta", resumen.getDescuExenta());
+        jsonResumen.addProperty("descuGravada", resumen.getDescuGravada());
+        jsonResumen.addProperty("descuNoSuj", resumen.getDescuNoSuj());
+        jsonResumen.addProperty("ivaPerci1", resumen.getIvaPerci1());
+        jsonResumen.addProperty("ivaRete1", resumen.getIvaRete1());
+        jsonResumen.addProperty("montoTotalOperacion", resumen.getMontoTotalOperacion());
+        jsonResumen.addProperty("numPagoElectronico", resumen.getNumPagoElectronico());
+        jsonResumen.addProperty("porcentajeDescuento", resumen.getPorcentajeDescuento());
+        jsonResumen.addProperty("reteRenta", resumen.getReteRenta());
+        jsonResumen.addProperty("saldoFavor", resumen.getSaldoFavor());
+        jsonResumen.addProperty("subTotal", resumen.getSubTotal());
+        jsonResumen.addProperty("subTotalVentas", resumen.getSubTotalVentas());
+        jsonResumen.addProperty("totalDescu", resumen.getTotalDescu());
+        jsonResumen.addProperty("totalExenta", resumen.getTotalExenta());
+        jsonResumen.addProperty("totalGravada", resumen.getTotalGravada());
+        jsonResumen.addProperty("totalLetras", resumen.getTotalLetras());
+        jsonResumen.addProperty("totalNoGravado", resumen.getTotalNoGravado());
+        jsonResumen.addProperty("totalNoSuj", resumen.getTotalNoSuj());
+        jsonResumen.addProperty("totalPagar", resumen.getTotalPagar());
+        JsonArray jsonTributos = new JsonArray();
+        List<ClsDtttributo> tributos2 = dteObtenerDte.obtenerTributos(dato);
+        for (ClsDtttributo tributo : tributos2) {
+            JsonObject jsonTributo = new JsonObject();
+            jsonTributo.addProperty("codigo", tributo.getCodigo());
+            jsonTributo.addProperty("descripcion", tributo.getDescripcion());
+            jsonTributo.addProperty("valor", tributo.getValor());
+            jsonTributos.add(jsonTributo);
+        }
+        List<ClsDtepago> pagos = dteObtenerDte.obtenerPagos(identificacion.getCodigoGeneracion());
+        List<ClsDteExtension> exten = dteObtenerDte.obtenerExtensiones(identificacion.getCodigoGeneracion());
+        JsonArray jsonPagos = new JsonArray();
+
+        for (ClsDtepago pago : pagos) {
+            JsonObject jsonPago = new JsonObject();
+            jsonPago.addProperty("codigo", pago.getCodigo());
+            jsonPago.addProperty("montoPago", pago.getMontoPago());
+            jsonPago.addProperty("periodo", pago.getPeriodo());
+            jsonPago.addProperty("plazo", pago.getPlazo());
+            jsonPago.addProperty("referencia", pago.getReferencia());
+            jsonPagos.add(jsonPago);
+        }
+
+        JsonObject jsonExtension = new JsonObject();
+        for (ClsDteExtension extension : exten) {
+            jsonExtension.addProperty("docuEntrega", extension.getDocuEntrega());
+            jsonExtension.addProperty("docuRecibe", extension.getDocuRecibe());
+            jsonExtension.addProperty("nombEntrega", extension.getNombEntrega());
+            jsonExtension.addProperty("nombRecibe", extension.getNombRecibe());
+            jsonExtension.addProperty("observaciones", extension.getObservaciones());
+            jsonExtension.addProperty("placaVehiculo", extension.getPlacaVehiculo());
+        }
+
+        JsonObject jsonDocumento = new JsonObject();
+        jsonDocumento.add("identificacion", jsonIdentificacion);
+        jsonDocumento.add("documentoRelacionado", JsonNull.INSTANCE);
+        jsonDocumento.add("emisor", jsonEmisor);
+        jsonDocumento.add("receptor", jsonReceptor);
+        jsonDocumento.add("cuerpoDocumento", jsonCuerpoDocumento);
+        jsonResumen.add("tributos", jsonTributos);
+        jsonResumen.add("pagos", jsonPagos);
+        jsonResumen.add("extension", jsonExtension);
+        jsonDocumento.add("resumen", jsonResumen);
+        String jsonString = gson.toJson(jsonDocumento);
+
+        // Escribe el objeto JSON en un archivo
+       try {
+    // Paso 1: Escribir el archivo JSON
+    FileWriter file = new FileWriter(rutaArchivo);
+    file.write(jsonString);
+    file.flush();
+    file.close(); // Asegúrate de cerrar el archivo antes de enviarlo por correo
+    System.out.println("Archivo JSON escrito correctamente en la ubicación: " + rutaArchivo);
+
+    Map p = new HashMap();
+
+    p.put("uuidpa", identificacion.getCodigoGeneracion());
+    p.put("pdir", (new File("").getAbsolutePath() + "/src/Reportes/"));
+
+    JasperReport report;
+    JasperPrint print;
+    try {
+        Connection connection = new ClsConexionLocal().getConection();
+
+        report = JasperCompileManager.compileReport(new File("").getAbsolutePath() + "/src/Reportes/RptDteFiscal.jrxml");
+        print = JasperFillManager.fillReport(report, p, connection);
+
+        // Generar el archivo PDF y guardarlo en la ruta especificada con el nombre deseado
+        String pdfFileName = identificacion.getNumeroControl()+ ".pdf";
+        JasperExportManager.exportReportToPdfFile(print, pdfFileName);
+        System.out.println("Archivo PDF generado correctamente en: " + pdfFileName);
+
+        // Mostrar el reporte en el JasperViewer
+        JasperViewer view = new JasperViewer(print, false);
+        view.setTitle("Reporte General de Compras Realizadas");
+        view.setVisible(true);
+    } catch (JRException e) {
+        e.printStackTrace();
+    }
+} catch (IOException e) {
+    System.out.println("Error al escribir el archivo JSON: " + e.getMessage());
+}
+//    try {
+//      //    parameters.put("uuidpa", identificacion.getCodigoGeneracion());
+//        // Ruta del archivo .jasper
+//        JasperReport jasperReportPath = JasperCompileManager.compileReport(new File("").getAbsolutePath() + "/src/Reportes/RptDteFiscal.jrxml");
+//
+//        // Ruta donde se guardará el archivo PDF
+//        rutaArchivo = directorioActual + "/" + identificacion.getNumeroControl() + ".pdf";
+//
+//        // Crear un mapa para pasar parámetros al reporte
+//        Map<String, Object> parameters = new HashMap<String, Object>();
+//        parameters.put("uuidpa", identificacion.getCodigoGeneracion());
+//
+//        // Rellenar el informe con datos (usa una fuente de datos vacía si no se necesitan datos)
+//        JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReportPath, parameters, new JRBeanCollectionDataSource(new ArrayList<>()));
+//
+//        // Exportar el informe a un byte[] en lugar de directamente a un archivo
+//        byte[] pdfBytes = JasperExportManager.exportReportToPdf(jasperPrint);
+//
+//        // Escribir el byte[] en un archivo
+//        try (OutputStream outputStream = new FileOutputStream(rutaArchivo)) {
+//            outputStream.write(pdfBytes);
+//            outputStream.flush();
+//            System.out.println("Archivo PDF generado correctamente en: " + rutaArchivo);
+//        } catch (IOException e) {
+//            System.out.println("Error al escribir el archivo PDF: " + e.getMessage());
+//        }
+//
+//    } catch (Exception e) {
+//        e.printStackTrace();
+//    }
+
+    // Paso 2: Enviar el archivo JSON por correo
+//     String correoRemitente = "******";
+//     String passwordRemitente = "******";
+//     String correoDestinatario = "hectoralascastro@gmail.com";
+//     String asuntoCorreo = identificacion.getNumeroControl();
+//     String mensajeCorreo = emisor.getNombre() + identificacion.getNumeroControl();
+//    
+//     EnviarCorreo correo = new EnviarCorreo(correoRemitente, passwordRemitente, correoDestinatario, asuntoCorreo, mensajeCorreo, rutaArchivo, nombreArchivo);
+//     correo.enviarCorreo();
+
+ String pdfFileName = identificacion.getNumeroControl() + ".pdf";
+   
+
+    // ... El resto de tu código (JasperViewer, etc.) ...
+
+
+
+File jsonFile = new File(rutaArchivo);
+File pdfFile = new File(pdfFileName);
+GoogleDriveUploader googleDriveUploader = new GoogleDriveUploader();
+
+try {
+    // Subir el archivo JSON a Google Drive y obtener su enlace webViewLink
+    String webViewLinkJson = googleDriveUploader.uploadFileToGoogleDrive(jsonFile.getAbsolutePath(), "application/json");
+
+    // Subir el archivo PDF a Google Drive y obtener su enlace webViewLink
+    String webViewLinkPdf = googleDriveUploader.uploadFileToGoogleDrive(pdfFile.getAbsolutePath(), "application/pdf");
+
+    // Eliminar el archivo PDF localmente
+    if (pdfFile.delete()) {
+        System.out.println("El archivo PDF ha sido eliminado exitosamente.");
+    } else {
+        System.out.println("No se pudo eliminar el archivo PDF.");
+    }
+
+    // Mostrar los códigos QR para ambos archivos
+    generateQRCodeImage.displayQRCode(webViewLinkJson, webViewLinkPdf, 500, 500);
+
+} catch (Exception e) {
+    e.printStackTrace();
+}
+   
+        
+        
+            
+       
+
+//enviarWhatsApp whatsapp = new enviarWhatsApp();
+//whatsapp.enviarWhatsApp(jsonFile, pdfFile, "70692592","70693596");
+
+
+    }
+}
